@@ -247,6 +247,50 @@ static void bluez_endpoint_select_configuration(GDBusMethodInvocation *inv, void
 	}
 #endif
 
+#if ENABLE_LDAC
+	case A2DP_CODEC_VENDOR_LDAC: {
+
+		if (size != sizeof(a2dp_ldac_t)) {
+			error("Invalid capabilities size: %zu != %zu", size, sizeof(a2dp_ldac_t));
+			goto fail;
+		}
+
+		a2dp_ldac_t *cap = (a2dp_ldac_t *)capabilities;
+
+		if (config.a2dp.force_44100 &&
+				cap->frequency & LDAC_SAMPLING_FREQ_44100)
+			cap->frequency = LDAC_SAMPLING_FREQ_44100;
+		else if (cap->frequency & LDAC_SAMPLING_FREQ_96000)
+			cap->frequency = LDAC_SAMPLING_FREQ_96000;
+		else if (cap->frequency & LDAC_SAMPLING_FREQ_88200)
+			cap->frequency = LDAC_SAMPLING_FREQ_88200;
+		else if (cap->frequency & LDAC_SAMPLING_FREQ_48000)
+			cap->frequency = LDAC_SAMPLING_FREQ_48000;
+		else if (cap->frequency & LDAC_SAMPLING_FREQ_44100)
+			cap->frequency = LDAC_SAMPLING_FREQ_44100;
+		else {
+			error("No supported sampling frequencies: %#x", cap->frequency);
+			goto fail;
+		}
+
+		if (config.a2dp.force_mono &&
+				cap->channel_mode & LDAC_CHANNEL_MODE_MONO)
+			cap->channel_mode = LDAC_CHANNEL_MODE_MONO;
+		else if (cap->channel_mode & LDAC_CHANNEL_MODE_STEREO)
+			cap->channel_mode = LDAC_CHANNEL_MODE_STEREO;
+		else if (cap->channel_mode & LDAC_CHANNEL_MODE_DUAL_CHANNEL)
+			cap->channel_mode = LDAC_CHANNEL_MODE_DUAL_CHANNEL;
+		else if (cap->channel_mode & LDAC_CHANNEL_MODE_MONO)
+			cap->channel_mode = LDAC_CHANNEL_MODE_MONO;
+		else {
+			error("No supported channel modes: %#x", cap->channel_mode);
+			goto fail;
+		}
+
+		break;
+	}
+#endif
+
 	default:
 		debug("Endpoint path not supported: %s", path);
 		g_dbus_method_invocation_return_error(inv, G_DBUS_ERROR,
@@ -461,6 +505,35 @@ static int bluez_endpoint_set_configuration(GDBusMethodInvocation *inv, void *us
 				}
 
 				if (cap->channel_mode != APTX_CHANNEL_MODE_STEREO) {
+					error("Invalid configuration: %s", "Invalid channel mode");
+					goto fail;
+				}
+
+				break;
+			}
+#endif
+
+#if ENABLE_LDAC
+			case A2DP_CODEC_VENDOR_LDAC: {
+
+				if (size != sizeof(a2dp_ldac_t)) {
+					error("Invalid configuration: %s", "Invalid size");
+					goto fail;
+				}
+
+				a2dp_ldac_t *cap = (a2dp_ldac_t *)capabilities;
+
+				if (cap->frequency != LDAC_SAMPLING_FREQ_44100 &&
+						cap->frequency != LDAC_SAMPLING_FREQ_48000 &&
+						cap->frequency != LDAC_SAMPLING_FREQ_88200 &&
+						cap->frequency != LDAC_SAMPLING_FREQ_96000) {
+					error("Invalid configuration: %s", "Invalid sampling frequency");
+					goto fail;
+				}
+
+				if (cap->channel_mode != LDAC_CHANNEL_MODE_MONO &&
+						cap->channel_mode != LDAC_CHANNEL_MODE_DUAL_CHANNEL &&
+						cap->channel_mode != LDAC_CHANNEL_MODE_STEREO) {
 					error("Invalid configuration: %s", "Invalid channel mode");
 					goto fail;
 				}
